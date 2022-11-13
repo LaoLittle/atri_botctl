@@ -73,7 +73,6 @@ jobs:
           - { name: Linux-armv7, os: ubuntu-18.04, tool: armv7-unknown-linux-gnueabihf }
           - { name: Linux-arm, os: ubuntu-18.04, tool: arm-unknown-linux-gnueabihf }
           - { name: Linux-thumbv7, os: ubuntu-latest, tool: thumbv7neon-unknown-linux-gnueabihf }
-          - { name: iOS-aarch64, os: macos-latest, tool: aarch64-apple-ios }
           - { name: FreeBSD-x64, os: ubuntu-latest, tool: x86_64-unknown-freebsd }
           - { name: NetBSD-x64, os: ubuntu-latest, tool: x86_64-unknown-netbsd }
           - { name: Illumos-x64, os: ubuntu-latest, tool: x86_64-unknown-illumos }
@@ -122,3 +121,58 @@ jobs:
         with:
           name: atri_botctl-${{ matrix.target.tool }}.dll
           path: target/${{ matrix.target.tool }}/debug/atri_botctl.dll
+
+  build-android:
+    strategy:
+      fail-fast: false
+      matrix:
+        arch:
+          - aarch64
+          - x86_64
+
+    name: Android-${{ matrix.arch }}
+    needs: [ test-and-build ]
+    runs-on: ubuntu-latest
+
+    env:
+      CI: 1
+      CARGO_INCREMENTAL: 0
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install rust toolchain
+        run: rustup target add ${{ matrix.arch }}-linux-android
+
+      - name: Install NDK
+        id: setup-ndk
+        uses: nttld/setup-ndk@v1
+        with:
+          ndk-version: r25
+
+      - name: Set Android NDK ToolChains Path
+        run: |
+          echo "ANDROID_NDK_HOME=${{ steps.setup-ndk.outputs.ndk-path }}" >> $GITHUB_ENV
+          echo ${{ steps.setup-ndk.outputs.ndk-path }}/toolchains/llvm/prebuilt/linux-x86_64/bin >> $GITHUB_PATH
+
+      - name: Set libgcc
+        run: |
+          cat << EOF > ${{ steps.setup-ndk.outputs.ndk-path }}/toolchains/llvm/prebuilt/linux-x86_64/lib64/clang/14.0.6/lib/linux/${{ matrix.arch }}/libgcc.a
+          INPUT(-lunwind)
+          EOF
+
+      - name: Build Android ${{ matrix.arch }}
+        run: cargo build --target ${{ matrix.arch }}-linux-android
+        env:
+          CC_AARCH64_LINUX_ANDROID: aarch64-linux-android26-clang
+          CXX_AARCH64_LINUX_ANDROID: aarch64-linux-android26-clang++
+          CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER: aarch64-linux-android26-clang
+          CC_X86_64_LINUX_ANDROID: x86_64-linux-android26-clang
+          CXX_X86_64_LINUX_ANDROID: x86_64-linux-android26-clang++
+          CARGO_TARGET_X86_64_LINUX_ANDROID_LINKER: x86_64-linux-android26-clang
+
+      - name: Upload
+        uses: actions/upload-artifact@v3
+        with:
+          name: libatri_botctl-${{ matrix.arch }}-linux-android.so
+          path: target/${{ matrix.arch }}-linux-android/debug/libatri_botctl.so
