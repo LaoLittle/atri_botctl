@@ -1,0 +1,76 @@
+name: Release
+
+on:
+  push:
+    tags: [ '*' ]
+
+jobs:
+  release:
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - { name: macOS-x64, os: macos-latest, tool: x86_64-apple-darwin }
+          - { name: Windows-x64, os: windows-latest, tool: x86_64-pc-windows-msvc }
+          - { name: Linux-x64, os: ubuntu-20.04, tool: x86_64-unknown-linux-gnu }
+          - { name: macOS-aarch64, os: macos-latest, tool: aarch64-apple-darwin }
+          - { name: Linux-aarch64, os: ubuntu-18.04, tool: aarch64-unknown-linux-gnu }
+          - { name: Linux-armv7, os: ubuntu-18.04, tool: armv7-unknown-linux-gnueabihf }
+          - { name: Linux-arm, os: ubuntu-18.04, tool: arm-unknown-linux-gnueabihf }
+          - { name: Linux-thumbv7, os: ubuntu-latest, tool: thumbv7neon-unknown-linux-gnueabihf }
+          - { name: iOS-aarch64, os: macos-latest, tool: aarch64-apple-ios }
+          - { name: FreeBSD-x64, os: ubuntu-latest, tool: x86_64-unknown-freebsd }
+          - { name: NetBSD-x64, os: ubuntu-latest, tool: x86_64-unknown-netbsd }
+          - { name: Illumos-x64, os: ubuntu-latest, tool: x86_64-unknown-illumos }
+
+    name: ${{ matrix.target.name }}
+    runs-on: ${{ matrix.target.os }}
+
+    env:
+      CI: 1
+      CARGO_INCREMENTAL: 0
+      windows: ${{ startsWith(matrix.target.name, 'Windows') }}
+      linux: ${{ startsWith(matrix.target.name, 'Linux') }}
+      mac: ${{ startsWith(matrix.target.name, 'mac') }}
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - if: ${{ endsWith(matrix.target.tool, 'musl') }}
+        run: sudo apt update && sudo apt install -y musl-tools musl-dev
+
+      - name: Setup rust toolchain
+        run: |
+          rustup update
+          rustup target add ${{ matrix.target.tool }}
+
+      - name: Build
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --release --target ${{ matrix.target.tool }}
+          use-cross: true
+
+      - name: Upload so
+        if: env.linux == 'true'
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: target/${{ matrix.target.tool }}/release/libatri_botctl.so
+          asset_name: libatri_botctl-${{ matrix.target.tool }}.so
+
+      - name: Upload dylib
+        if: env.mac == 'true'
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: target/${{ matrix.target.tool }}/release/libatri_botctl.dylib
+          asset_name: libatri_botctl-${{ matrix.target.tool }}.dylib
+
+      - name: Upload exe
+        if: env.windows == 'true'
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: target/${{ matrix.target.tool }}/release/atri_botctl.dll
+          asset_name: atri_botctl-${{ matrix.target.tool }}.dll
