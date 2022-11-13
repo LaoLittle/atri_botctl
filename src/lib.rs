@@ -5,6 +5,7 @@ use atri_plugin::Plugin;
 use dashmap::DashMap;
 use dashmap::mapref::entry::Entry;
 
+#[atri_plugin::plugin(name = "botctl")]
 struct AtriBotctl {
     client_group: Arc<DashMap<i64, i64>>,
     listener: Option<ListenerGuard>,
